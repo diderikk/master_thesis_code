@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: simple
+  labels:
+    app: simple
+    sidecar.istio.io/inject: "true"
+    istio.io/dataplane-mode: "ambient"
+spec:
+  selector:
+    matchLabels:
+      app: simple
+  template:
+    metadata:
+      annotations:
+        linkerd.io/inject: enabled
+      labels:
+        app: simple
+        #sidecar.istio.io/inject: "true"
+        istio.io/dataplane-mode: "ambient"
+    spec:
+      containers:
+        - name: simple
+          image: diderikk/elixir_ot:v0.2.3@sha256:b94a7f3cba5e9e28722ce1e9ce4543f1b0dbaee85d0bab7b00bfc56ee3351783
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1.5Gi"
+              cpu: "3.5"
+          ports:
+            - containerPort: 4000
+          envFrom:
+            - secretRef:
+                name: simple-secrets

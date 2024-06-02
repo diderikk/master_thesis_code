@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: database
+  labels:
+    app: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: database
+  template:
+    metadata:
+      annotations:
+        linkerd.io/inject: enabled
+      labels:
+        app: database
+        #sidecar.istio.io/inject: "true"
+        istio.io/dataplane-mode: "ambient"
+    spec:
+      containers:
+        - name: database
+          image: postgres:15.1 
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "250m"
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: database-secrets
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: database-volume
+      volumes:
+        - name: database-volume
+          persistentVolumeClaim:
+            claimName: database-pvc

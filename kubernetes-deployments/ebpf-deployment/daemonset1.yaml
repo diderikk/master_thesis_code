@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ebpf-program
+  namespace: default
+  labels:
+    app: ebpf-program
+spec:
+  # replicas: 1
+  selector:
+    matchLabels:
+      app: ebpf-program
+  template:
+    metadata:
+      labels:
+        app: ebpf-program
+    spec:
+      serviceAccountName: ebpf-sa
+      automountServiceAccountToken: true
+      hostPID: true
+      hostIPC: true
+      hostNetwork: true
+      containers:
+        - name: ebpf-program
+          image: diderikk/ebpf-go:v5.0.0@sha256:76fd70c48a110fcb135bebde615d87d8466e66dcdbf901ac6e4008ba0a7de5ae
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "250m"
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+          envFrom:
+            - secretRef:
+                name: ebpf-secrets

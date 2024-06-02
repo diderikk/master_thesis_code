@@ -1,0 +1,51 @@
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: distributed-k6-test
+spec:
+  # Number of pods that will send HTTP requests concurrently
+  parallelism: 10
+  # References the script to be executed
+  script:
+    configMap:
+      name: k6-scripts
+      file: stress.js # Changed depending on the test to be run
+  # Meta-data used by service meshes to automatically attach the sidecars.
+  starter:
+    metadata:
+      annotations:
+        linkerd.io/inject: disabled
+      labels:
+        sidecar.istio.io/inject: "false"
+        istio.io/dataplane-mode: "none" # https://istio.io/latest/docs/ambient/usage/add-workloads/
+  initializer:
+    metadata:
+      annotations:
+        linkerd.io/inject: disabled
+      labels:
+        sidecar.istio.io/inject: "false"
+        istio.io/dataplane-mode: "none" # https://istio.io/latest/docs/ambient/usage/add-workloads/
+  runner:
+    metadata:
+      annotations:
+        linkerd.io/inject: enabled
+      labels:
+        #sidecar.istio.io/inject: "true"
+        istio.io/dataplane-mode: "ambient"
+    env:
+      - name: API_ENDPOINT
+        value: http://simple-service.default.svc.cluster.local:4000/api/dogs
+      - name: JOB_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.labels['job-name']
+    # Attaches the Persistent Volume
+    volumeMounts:
+      - mountPath: /home/k6
+        name: k6-volume
+    volumes:
+      - name: k6-volume
+        persistentVolumeClaim:
+          claimName: k6-pvc
+  # Outputs the metrics in a compressed format to the attached Persistent Volume
+  arguments: --out csv=/home/k6/$(JOB_NAME).gz

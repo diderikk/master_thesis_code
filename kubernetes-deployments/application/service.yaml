@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: simple-service
+  labels:
+    app: simple
+spec:
+  type: NodePort
+  ports:
+    - port: 4000
+  selector:
+    app: simple
