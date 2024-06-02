@@ -1,0 +1,7 @@
+go 1.21.6
+
+use ./load_balancer
+use ./observability
+use ./bandwidth_management
+use ./network_policy
+use ./combined

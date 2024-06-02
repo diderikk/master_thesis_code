@@ -1,0 +1,7 @@
+# Workspace specific
+.vscode/
+
+# Generated during compilation and build
+*_bpfeb.*
+*_bpfel.*
+kubernetes-ebpf
