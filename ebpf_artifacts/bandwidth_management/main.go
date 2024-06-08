@@ -26,6 +26,7 @@ func main() {
 	attachEbpf(ebpfObjects)
 }
 
+// Continously reset eBPF map counting packets between to pods
 func asyncResetCounter[T programIpv4Key](programMap ebpf.Map) {
 	log.Println("Resetting begun...")
 

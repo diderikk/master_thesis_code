@@ -10,6 +10,8 @@
 #include <linux/icmpv6.h>
 #include <linux/udp.h>
 
+// BASED ON: https://github.com/xdp-project/xdp-tutorial/blob/master/common/parsing_helpers.h and https://github.com/lizrice/learning-ebpf/blob/main/chapter8/network.h
+
 #define ETH_P_IP 0x0800
 #define IP_DST_OFF (ETH_HLEN + offsetof(struct iphdr, daddr))
 #define IP_SRC_OFF (ETH_HLEN + offsetof(struct iphdr, saddr))
@@ -32,6 +34,7 @@ struct hdr_cursor
 	void *pos;
 };
 
+// Extract the Ethernet packet
 static __always_inline struct ethhdr *get_eth_packet(void *data_end, struct hdr_cursor *cursor)
 {
 	struct ethhdr *eth = 0;
@@ -47,6 +50,7 @@ static __always_inline struct ethhdr *get_eth_packet(void *data_end, struct hdr_
 	return eth;
 }
 
+// Extract the IPv4 packet
 static __always_inline struct iphdr *get_ip_packet(void *data_end, struct hdr_cursor *cursor)
 {
 	struct iphdr *iph = 0;
@@ -72,6 +76,7 @@ static __always_inline struct iphdr *get_ip_packet(void *data_end, struct hdr_cu
 	return iph;
 }
 
+// Extract the IPv6 packet
 static __always_inline struct ipv6hdr *get_ipv6_packet(void *data_end, struct hdr_cursor *cursor)
 {
 	struct ipv6hdr *iph = 0;
@@ -91,8 +96,7 @@ static __always_inline struct ipv6hdr *get_ipv6_packet(void *data_end, struct hd
 	return iph;
 }
 
-
-
+// Extract the ICMP packet -> used during testing
 static __always_inline struct icmphdr *get_icmp_packet(void *data_end, struct hdr_cursor *cursor)
 {
 	struct icmphdr *icmph = 0;
@@ -106,6 +110,7 @@ static __always_inline struct icmphdr *get_icmp_packet(void *data_end, struct hd
 	return icmph;
 }
 
+// Extract the ICMPv6 packet -> used during testing
 static __always_inline struct icmp6hdr *get_icmpv6_packet(void *data_end, struct hdr_cursor *cursor)
 {
 	struct icmp6hdr *icmph = 0;
@@ -119,6 +124,7 @@ static __always_inline struct icmp6hdr *get_icmpv6_packet(void *data_end, struct
 	return icmph;
 }
 
+// Extract the TCP packet
 static __always_inline struct tcphdr *get_tcp_packet(void *data_end, struct hdr_cursor *cursor)
 {
 	struct tcphdr *tcph = 0;
@@ -142,6 +148,7 @@ static __always_inline struct tcphdr *get_tcp_packet(void *data_end, struct hdr_
 	return tcph;
 }
 
+// Extract the UDP packet
 static __always_inline struct udphdr *get_udp_packet(void *data_end, struct hdr_cursor *cursor)
 {
 	struct udphdr *udph = 0;
@@ -161,6 +168,8 @@ static __always_inline struct udphdr *get_udp_packet(void *data_end, struct hdr_
 	return udph;
 }
 
+// Assumes the buffer contains an Ethernet packet
+// Fetches the IP packet 
 static __always_inline void load_ip_packet(struct __sk_buff *skb, struct iphdr **iph){
   void *data_end = (void *)(long)skb->data_end;
   void *data = (void *)(long)skb->data;
@@ -179,6 +188,8 @@ static __always_inline void load_ip_packet(struct __sk_buff *skb, struct iphdr *
 	*iph = _iph;
 }
 
+// Extract the Ethernet and IP packet -> checks if the IP packet has encapsulated another IP packet -> if so, extract the inner IP packet
+// Extract the UDP or the TCP packet depending on the protocol
 static __always_inline void load_l3_and_l4_packet(struct __sk_buff *skb, struct iphdr **iph, struct tcphdr **tcph, struct udphdr **udph){
   void *data_end = (void *)(long)skb->data_end;
   void *data = (void *)(long)skb->data;
@@ -221,36 +232,44 @@ static __always_inline void load_l3_and_l4_packet(struct __sk_buff *skb, struct 
 	*udph = _udph;
 }
 
+// Swap IP packet's destination value using eBPF helper function
 static __always_inline long swap_destination_ip_address(struct __sk_buff *skb, __u32 new_ip_address){
 	void *from = (void*)(long)&new_ip_address;
 	return bpf_skb_store_bytes(skb, IP_DST_OFF, from, 4, 0);
 }
 
+// Swap IP packet's source value using eBPF helper function
 static __always_inline long swap_source_ip_address(struct __sk_buff *skb, __u32 new_ip_address){
 	void *from = (void*)(long)&new_ip_address;
 	return bpf_skb_store_bytes(skb, IP_SRC_OFF, from, 4, 0);
 }
 
+// Swap TCP packet's destination value using eBPF helper function
 static __always_inline long swap_destination_tcp_port(struct __sk_buff *skb, __u16 new_port){
 	void *from = (void*)(long)&new_port;
 	return bpf_skb_store_bytes(skb, TCP_DEST_OFF, from, 2, 0);
 }
 
+// Swap TCP packet's source value using eBPF helper function
 static __always_inline long swap_source_tcp_port(struct __sk_buff *skb, __u16 new_port){
 	void *from = (void*)(long)&new_port;
 	return bpf_skb_store_bytes(skb, TCP_SRC_OFF, from, 2, 0);
 }
 
+// Swap UDP packet's destination value using eBPF helper function
 static __always_inline long swap_destination_udp_port(struct __sk_buff *skb, __u16 new_port){
 	void *from = (void*)(long)&new_port;
 	return bpf_skb_store_bytes(skb, UDP_DEST_OFF, from, 2, 0);
 }
 
+// Swap UDP packet's source value using eBPF helper function
 static __always_inline long swap_source_udp_port(struct __sk_buff *skb, __u16 new_port){
 	void *from = (void*)(long)&new_port;
 	return bpf_skb_store_bytes(skb, UDP_SRC_OFF, from, 2, 0);
 }
 
+// After updating/swapping a packet's destination/source IP (L3) address, the check sum must be updated as well.
+// Uses two eBPF helper function
 static __always_inline long long update_l3_csum(struct __sk_buff *skb, struct iphdr *old_iph, struct iphdr *iph){
 	__u32 csum_diff = bpf_csum_diff((__be32 *)old_iph, sizeof(*old_iph), (__be32 *)iph, sizeof(*iph), 0);
 
@@ -260,6 +279,9 @@ static __always_inline long long update_l3_csum(struct __sk_buff *skb, struct ip
 	return bpf_l3_csum_replace(skb, IP_CSUM_OFF, 0, csum_diff, 0);
 }
 
+
+// After updating/swapping a packet's destination/source TCP (L4) port, the check sum must be updated as well.
+// Uses two eBPF helper function
 static __always_inline long long update_tcp_csum(struct __sk_buff *skb, struct tcphdr *old_tcph, struct tcphdr *tcph){
 	__u32 csum_diff = bpf_csum_diff((__be32 *)old_tcph, sizeof(*old_tcph), (__be32 *)tcph, sizeof(*tcph), 0);
 
@@ -269,6 +291,8 @@ static __always_inline long long update_tcp_csum(struct __sk_buff *skb, struct t
 	return bpf_l3_csum_replace(skb, IP_CSUM_OFF, 0, csum_diff, 0);
 }
 
+// After updating/swapping a packet's destination/source UDP (L4) port, the check sum must be updated as well.
+// Uses two eBPF helper function
 static __always_inline long long update_udp_csum(struct __sk_buff *skb, struct udphdr *old_udph, struct udphdr *udph){
 	__u32 csum_diff = bpf_csum_diff((__be32 *)old_udph, sizeof(*old_udph), (__be32 *)udph, sizeof(*udph), 0);
 

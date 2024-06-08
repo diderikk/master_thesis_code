@@ -127,7 +127,9 @@ func LoadObjects(opts *ebpf.CollectionOptions) *programObjects {
 	return &objs
 }
 
-func getEthernetInterfaces() ([]net.Interface, error) {
+// Fetches all relevant network interfaces
+// Can specify which network interfaces to fetch using the INTERFACE_SUBSTRING environment variable.
+func getNetworkInterfaces() ([]net.Interface, error) {
 	interfaceList, err := net.Interfaces()
 	resultingList := make([]net.Interface, 0, 1)
 
@@ -156,7 +158,7 @@ func getEthernetInterfaces() ([]net.Interface, error) {
 }
 
 func deleteAll_CLSACT_qdiscs() {
-	ifaces, err := getEthernetInterfaces()
+	ifaces, err := getNetworkInterfaces()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -178,6 +180,8 @@ func deleteAll_CLSACT_qdiscs() {
 	}
 }
 
+// Adds a qdics to a network interface
+// Uses the clsact type
 func addQDisc(iface net.Interface) (*netlink.GenericQdisc, error) {
 	qdisc := &netlink.GenericQdisc{
 		QdiscAttrs: netlink.QdiscAttrs{
@@ -195,6 +199,8 @@ func deleteQDisc(qdisc netlink.Qdisc) error {
 	return netlink.QdiscDel(qdisc)
 }
 
+// Adds a bpf filter containing the eBPF program to a network interface
+// Direct action set to true, as recommneded by https://qmonnet.github.io/whirl-offload/2020/04/11/tc-bpf-direct-action/
 func attachTCProgram(iface net.Interface, program ebpf.Program, attr netlink.FilterAttrs) error {
 
 	return netlink.FilterAdd(&netlink.BpfFilter{
@@ -205,8 +211,9 @@ func attachTCProgram(iface net.Interface, program ebpf.Program, attr netlink.Fil
 	})
 }
 
+// Attaches the eBPF program to the Traffic Control hook on the network interfaces specified by INTERFACE_SUBSTRING
 func attachProgramToInterfaces(program *ebpf.Program, parent uint32) {
-	ifaces, err := getEthernetInterfaces()
+	ifaces, err := getNetworkInterfaces()
 
 	if err != nil {
 		panic(err.Error())
@@ -232,7 +239,7 @@ func attachProgramToInterfaces(program *ebpf.Program, parent uint32) {
 				}
 			}
 		}
-
+		// Checks that the eBPF program does not already exists on the hook
 		if pass {
 			log.Printf("Filter already exists")
 			continue
@@ -271,6 +278,7 @@ func attachProgramToInterfaces(program *ebpf.Program, parent uint32) {
 	}
 }
 
+// Continously checks for new network interfaces, and attaches the eBPF program to them
 func attachProgramToInterfacesLoop(program *ebpf.Program, parent uint32) {
 	attachProgramToInterfaces(program, parent)
 

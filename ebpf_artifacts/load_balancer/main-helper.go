@@ -6,15 +6,18 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+// This file contains handler functions for when events occur in the Kubernetes cluster
+
 func handleAddService(spec *ebpf.MapSpec, objs *programObjects, ebpfMapofMap *EBPFMapOfMaps) func(service Service) {
 	return func(service Service) {
-		// Checks if all values has been set (uint32 default value is 0)
+		// Checks if all values has been set (uint32 default value is 0) in the Kubernetes Service resource
 		if service.ClusterIP > 0 &&
 			len(service.TargetPortToServicePortMap) > 0 &&
 			len(service.Endpoints) > 0 {
 			// Generates a new service map. Key: Service Port
 			servicePortToNewEbpfMaps := make(map[uint16]*ebpf.Map, len(service.TargetPortToServicePortMap))
 
+			// Generates a new eBPF map for each type of target port to service port mapping in the Kubernetes Service resource
 			for _, servicePort := range service.TargetPortToServicePortMap {
 				servicePortToNewEbpfMaps[servicePort] = GenerateMap(spec)
 			}
@@ -53,6 +56,7 @@ func handleDeleteService(objs *programObjects, ebpfMapofMap *EBPFMapOfMaps) func
 	}
 }
 
+// Easy implementation, not optimized
 func handleUpdateService(spec *ebpf.MapSpec, objs *programObjects, ebpfMapofMap *EBPFMapOfMaps) func(oldIp uint32, oldServicePorts []uint16, service Service) {
 	return func(oldIp uint32, oldServicePorts []uint16, newService Service) {
 		handleDeleteService(objs, ebpfMapofMap)(oldIp, oldServicePorts)
@@ -60,12 +64,15 @@ func handleUpdateService(spec *ebpf.MapSpec, objs *programObjects, ebpfMapofMap 
 	}
 }
 
+// Adds the endpoint for each target port to service port mapping in the Kubernetes Service resource
+// Endpoints point to pods
 func addAllEndpointsToEbpfServiceMaps(service Service, ebpfMaps map[uint16]*ebpf.Map) map[uint16]uint16 {
 	keysMap, valuesMap := convertServiceEndpointsToEbpfEndpoints(uint32(service.ClusterIP), service.Endpoints)
 	servicePortToEndpointAmounts := make(map[uint16]uint16, len(keysMap))
 
 	totalInserted := 0
 
+	// Add the relevant endpoints to each map
 	for servicePort, keys := range keysMap {
 		inserted, err := ebpfMaps[servicePort].BatchUpdate(keys, valuesMap[servicePort], &ebpf.BatchOptions{})
 		if err != nil {
@@ -86,10 +93,13 @@ func addAllEndpointsToEbpfServiceMaps(service Service, ebpfMaps map[uint16]*ebpf
 	return servicePortToEndpointAmounts
 }
 
+// eBPF endpoints consist of IPs and ports of the pod referenced by the Kubernetes Service resource.
+// Referenced by the Service resource's IP and Port. -> a Service resource can be reference multiple pods.
 func convertServiceEndpointsToEbpfEndpoints(serviceClusterIP uint32, serivceEndpoints []Endpoint) (map[uint16][]uint32, map[uint16][]programEndpoint) {
 	keys := make(map[uint16][]uint32, len(serivceEndpoints))
 	values := make(map[uint16][]programEndpoint, len(serivceEndpoints))
 
+	// eBPF endpoint consist of a IP and port
 	for _, endpoint := range serivceEndpoints {
 		epStruct := programEndpoint{
 			Ip:   uint32(endpoint.IP),

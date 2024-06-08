@@ -7,10 +7,12 @@ import (
 	v1 "k8s.io/api/networking/v1"
 )
 
+// This file contains handler functions for when events occur in the Kubernetes cluster
+
 func handleAddNetworkPolicy(objs *programObjects, podMap *PodMap, namespaceMap *NamespaceMap) func(networkpolicy NetworkPolicy) {
 	return func(networkPolicy NetworkPolicy) {
 		applicablePods := getPodIpsFromMatchLabel(podMap, networkPolicy.MatchLabel)
-
+		// Adds the new Network Policy to the eBPF map containing network policies
 		addEbpfPolicies(objs.NetworkPolicyMap, podMap, namespaceMap, networkPolicy, applicablePods)
 	}
 }
@@ -18,11 +20,12 @@ func handleAddNetworkPolicy(objs *programObjects, podMap *PodMap, namespaceMap *
 func handleDeleteNetworkPolicy(objs *programObjects, podMap *PodMap, namespaceMap *NamespaceMap) func(networkPolicy NetworkPolicy) {
 	return func(networkPolicy NetworkPolicy) {
 		applicablePods := getPodIpsFromMatchLabel(podMap, networkPolicy.MatchLabel)
-
+		// Deletes the Network Policy in the eBPF map containing network policies
 		deleteEbpfPolicies(objs.NetworkPolicyMap, podMap, namespaceMap, networkPolicy, applicablePods)
 	}
 }
 
+// TODO: Should be optimized
 func handleUpdateNetworkPolicy(objs *programObjects, podMap *PodMap, namespaceMap *NamespaceMap) func(oldNetworkPolicy NetworkPolicy, newNetworkPolicy NetworkPolicy) {
 	return func(oldNetworkPolicy NetworkPolicy, newNetworkPolicy NetworkPolicy) {
 		handleDeleteNetworkPolicy(objs, podMap, namespaceMap)(oldNetworkPolicy)
@@ -33,7 +36,7 @@ func handleUpdateNetworkPolicy(objs *programObjects, podMap *PodMap, namespaceMa
 func handleAddPod(objs *programObjects, podMap *PodMap, namespaceMap *NamespaceMap, networkPolicyMap *NetworkPolicyMap) func(podIp uint32, matchLabels map[string]string) {
 	return func(podIp uint32, matchLabels map[string]string) {
 		networkPolicyMap.RLock()
-
+		// Apply exisiting network policies to the new pod
 		for _, affectedNetworkPolicy := range networkPolicyMap.m {
 			applicablePods := getPodIpsFromMatchLabel(podMap, affectedNetworkPolicy.MatchLabel)
 			addEbpfPolicies(objs.NetworkPolicyMap, podMap, namespaceMap, affectedNetworkPolicy, applicablePods)
@@ -46,7 +49,7 @@ func handleDeletePod(objs *programObjects, podMap *PodMap, namespaceMap *Namespa
 	return func(podIp uint32, matchLabels map[string]string) {
 
 		networkPolicyMap.RLock()
-
+		// Removes network policy entries related to the deleted pod from the eBPF map containing network policies
 		for _, affectedNetworkPolicy := range networkPolicyMap.m {
 			applicablePods := getPodIpsFromMatchLabel(podMap, affectedNetworkPolicy.MatchLabel)
 			deleteEbpfPolicies(objs.NetworkPolicyMap, podMap, namespaceMap, affectedNetworkPolicy, applicablePods)
@@ -67,6 +70,8 @@ func deleteEbpfPolicies(ebpfMap *ebpf.Map, podMap *PodMap, namespaceMap *Namespa
 	ebpfMap.BatchDelete(constructedKeys, &ebpf.BatchOptions{})
 }
 
+// Construct eBPF entries from network policies
+// eBPF entries are defined with a key (source Pod/Service IP, destination Pod/Service IP), and a value (1: allowed traffic, 0: deny traffic)
 func constructEbpfNetworkPolicies(podMap *PodMap, namespaceMap *NamespaceMap, networkPolicy NetworkPolicy, applicablePods []uint32) ([]programKey, []uint32) {
 	containsEgress := false
 	containsIngress := false
@@ -172,6 +177,7 @@ func constructEbpfNetworkPolicies(podMap *PodMap, namespaceMap *NamespaceMap, ne
 	return constructedPoliciyKeys, constructedPoliciyValues
 }
 
+// Extract pod from memory based on namespace and labels
 func getSelectedPodsFromPolicies(podMap *PodMap, namespaceMap *NamespaceMap, policies []v1.NetworkPolicyPeer) []uint32 {
 	pods := make([]uint32, 0)
 	podMap.RLock()

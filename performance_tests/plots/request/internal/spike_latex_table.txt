@@ -1,0 +1,24 @@
+\begin{table}
+\centering
+\resizebox{\columnwidth}{!}{\begin{tabular}{|l|l|l|l|l|l|l|l|}
+\hline
+ & Median (ms) & Mean (ms) & Minimum (ms) & p10 (ms) & p30 (ms) & p70 (ms) & p90 (ms) \\
+\hline
+linkerd & \large{5.9248} & \large{30.6119} & \large{1.5886} & \large{3.1775} & \large{4.3882} & \large{13.1802} & \large{97.431} \\
+\hline
+istio & \large{6.4573} & \large{31.1781} & \large{1.762} & \large{3.6462} & \large{4.884} & \large{15.0886} & \large{98.6} \\
+\hline
+without & \large{2.8698} & \large{14.0509} & \large{0.7706} & \large{1.4809} & \large{2.2347} & \large{3.9788} & \large{69.8659} \\
+\hline
+traefik-mesh & \large{4.6001} & \large{33.7916} & \large{1.202} & \large{2.2563} & \large{3.223} & \large{36.2838} & \large{97.3627} \\
+\hline
+istio-ambient & \large{4.7795} & \large{25.341} & \large{1.1657} & \large{2.5245} & \large{3.5716} & \large{9.3621} & \large{88.9051} \\
+\hline
+istio-merbridge & \large{6.3949} & \large{29.7383} & \large{1.7296} & \large{3.539} & \large{4.8032} & \large{13.3336} & \large{94.9833} \\
+\hline
+cilium & \large{3.3372} & \large{34.2495} & \large{0.8187} & \large{1.6403} & \large{2.4852} & \large{9.8142} & \large{101.3492} \\
+\hline
+ebpf & \large{4.0124} & \large{33.7002} & \large{0.9598} & \large{1.942} & \large{2.8794} & \large{16.3119} & \large{97.1149} \\
+\hline
+\end{tabular}}
+\end{table}

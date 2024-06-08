@@ -36,7 +36,7 @@ struct
   __uint(max_entries, 64 * 4096);
 } event_buff SEC(".maps");
 
-// Hash Map key: Source IPv4 address and Destination IPv4 address
+// Hash Map key: Source and destination IPv4 address
 struct key
 {
   __u32 saddr;
@@ -57,7 +57,6 @@ struct {
 static __always_inline __u32 *increment_count(struct iphdr *iph, __u16 sport, __u16 dport);
 static __always_inline void initialize_notify_event(struct iphdr *iph, struct event *notify_event);
 
-// XDP events
 SEC("tc")
 int observe(struct __sk_buff *skb)
 {
@@ -108,7 +107,7 @@ int observe(struct __sk_buff *skb)
       sport = udph->source;
     }
   }
-
+  // Increments of packet count of the current flow
   increment_count(iph, sport, dport);
 
   notify_event = bpf_ringbuf_reserve(&event_buff, sizeof(struct event), 0);
@@ -124,6 +123,7 @@ int observe(struct __sk_buff *skb)
   return TC_ACT_OK;
 }
 
+// Increments the count of packets sent between a source and destination (L3 and L4)
 static __always_inline __u32 *increment_count(struct iphdr *iph, __u16 sport, __u16 dport){
   struct key key = {iph->saddr, sport, iph->daddr, dport};
 

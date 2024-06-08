@@ -30,8 +30,6 @@ RUN apt-get update && apt-get upgrade -y
 
 WORKDIR /app
 
-# ENV INTERFACE_SUBSTRING wlp0s20f3
-
 COPY --from=compiler /compiled/bandwidth-manager-ebpf ./
 
 CMD ["./bandwidth-manager-ebpf"]

@@ -21,7 +21,7 @@ struct event
 {
   unsigned char saddr[4];
   unsigned char daddr[4];
-  // Original destinatin address
+  // Original destination address
   unsigned char odaddr[4];
 };
 
@@ -46,6 +46,7 @@ struct flow_endpoint
 };
 
 // Padding different between go application in userspace 0x00 (userspace) -> 0xff (eBPF)
+// Therefore, port is not __u16
 struct key
 {
   __u32 ip;
@@ -71,7 +72,7 @@ struct
   __uint(max_entries, 64 * 4096);
 } event_buff SEC(".maps");
 
-// Port Map. Key: Index 0-1024, Value: Port struct (port and target port).
+// Endpoint Array. Key: Index 0-1024, Value: (IP address and Port of new packet destination).
 struct endpoints_array
 {
   __uint(type, BPF_MAP_TYPE_ARRAY);
@@ -80,6 +81,7 @@ struct endpoints_array
   __uint(max_entries, ENDPOINT_MAX);
 } endpoints SEC(".maps");
 
+// Endpoint meta map. Key: Key: Packet destionation IP address and port, Value: Struct containg the number of possible endpoints to load balance between
 struct {
   __uint(type, BPF_MAP_TYPE_LRU_HASH);
   __type(key, struct key);
@@ -88,7 +90,7 @@ struct {
   __uint(max_entries, SERVICE_MAX);
 } service_ref_meta_map SEC(".maps");
 
-// Port Map. Key: Destionation IP address and port, Value: An BPF array containing all endpoints for a referenced service resource.
+// Service Map. Key: Destination IP address and port, Value: A pointer to a BPF array (endpoints_array struct) containing all endpoints for a referenced service resource.
 struct
 {
   __uint(type, BPF_MAP_TYPE_HASH_OF_MAPS);
@@ -99,7 +101,8 @@ struct
 } service_refs_map SEC(".maps");
 
 
-// Reason for not requiring to delete entries after they are over -> might cause inconsistencies
+
+// Flow map. Key Source and Destination IP address and port, Value: Existing flow destination (IP address and port)
 struct {
   __uint(type, BPF_MAP_TYPE_LRU_HASH);
   __type(key, struct flow_key);
@@ -149,15 +152,18 @@ int reverse_load_balance(struct __sk_buff *skb){
     sport = udph->source;
   }
 
+  // Checks if a previous packet with same destination and source has been load balanced
   search_flows(iph, sport, dport, &r_ep);
   if(r_ep != 0){
     struct iphdr old_iph = *iph;
     if(r_ep->is_destination == 1)
       return TC_ACT_OK;
-
+    // If similar packet has been load balanced, the source address needs to swapped
+    // with the original destination, since this is where the original sender expects to
+    // receive packet from.
     swap_source(skb, &old_iph, iph, tcph, udph, r_ep);
 
-    // // Copies the packet to same interface (egress) -> This is only used for debugging/explanation
+    // Copies the packet to same interface (egress) -> This is only used for debugging/explanation
     // bpf_clone_redirect(skb, skb->ifindex, 0);
     // // Discards the packet
     // return TC_ACT_SHOT;
@@ -203,6 +209,7 @@ int load_balance(struct __sk_buff *skb)
     sport = udph->source;
   }
 
+  // Checks if a previous packet with same destination and source has been load balanced
   search_flows(iph, sport, dport, &r_ep);
   if(r_ep != 0){
     
@@ -211,6 +218,7 @@ int load_balance(struct __sk_buff *skb)
       return TC_ACT_OK;
 
     struct endpoint endpoint = {r_ep->ip, r_ep->port};
+    // If similar packet has been load balanced, also send this packet to the same destination
     swap_destination(skb, &old_iph, iph, tcph, udph, &endpoint);
 
     // // Copies the packet to same interface (ingress) -> This is only used for debugging/explanation
@@ -221,9 +229,12 @@ int load_balance(struct __sk_buff *skb)
     //TODO: Check if the first byte is equal to 10 (all service endpoints starts with 10)
     struct key key = {bpf_ntohl(iph->daddr), bpf_ntohs(dport)};
 
+    // Check if the destination is a Service endpoint, and therefore should be load balanced
+    // Randomly select a new endpoint for the packet, referenced by the Service endpoint
     select_service_endpoint(&key, &ep);
 
     if(ep != 0){
+      // The destination was a Service endpoint -> begin load balancing
       store_flows(iph, sport, dport, ep);
       struct iphdr old_iph = *iph;
       swap_destination(skb, &old_iph, iph, tcph, udph, ep);
@@ -251,7 +262,8 @@ int load_balance(struct __sk_buff *skb)
   return TC_ACT_OK;
 }
 
-
+// Checks if the packet's destination is a service endpoint
+// If it is, select one of the Service endpoints.
 static __always_inline void select_service_endpoint(struct key *key, struct endpoint ** ep)
 {
   if(key != 0){
@@ -317,8 +329,8 @@ static __always_inline long long swap_destination(struct __sk_buff *skb, struct 
   }
 
   load_ip_packet(skb, &iph);
+  // Swap IP Address (L3):
   if(iph != 0){
-    // Swap IP Address (L3):
     __u32 new_daddr = bpf_ntohl(ep->ip);
     long long result = swap_destination_ip_address(skb, new_daddr);
 
@@ -362,8 +374,9 @@ static __always_inline long long swap_source(struct __sk_buff *skb, struct iphdr
   }
 
   load_ip_packet(skb, &iph);
+  
+  // Swap IP Address (L3):
   if(iph != 0){
-    // Swap IP Address (L3):
     __u32 new_saddr = bpf_ntohl(ep->ip);
     long long result = swap_source_ip_address(skb, new_saddr);
 

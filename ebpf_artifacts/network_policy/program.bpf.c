@@ -81,6 +81,7 @@ int policy_check(struct __sk_buff *skb)
       iph = iph_inner;
   }
 
+// Validate path
 __u16 is_valid = validate_source_and_destination_path(iph->saddr, iph->daddr);
 
 if(is_valid == 0){
@@ -91,15 +92,16 @@ if(is_valid == 0){
     bpf_ringbuf_submit(notify_event, 0);
   }
 
+  // If path is invalid, discard packet
   return TC_ACT_SHOT;
 }
 
 return TC_ACT_OK;
 }
 
-
+// Validates the path source and destination
 static __always_inline __u16 validate_source_and_destination_path(__u32 saddr, __u32 daddr){
-  // bpf_printk("Searching for policy. Saddr: %d, Daddr: %d", bpf_ntohl(saddr), bpf_ntohl(daddr));
+  // Check if path (source and destination) exist
   struct key key = {bpf_ntohl(saddr), bpf_ntohl(daddr)};
   __u32 * path_allowed = bpf_map_lookup_elem(&network_policy_map, &key);
 
@@ -111,11 +113,16 @@ static __always_inline __u16 validate_source_and_destination_path(__u32 saddr, _
     return 0;
   }
 
+  // If path does not exist, check if the destination has allowed ingress
+
   struct key key_ingress = {0, bpf_ntohl(daddr)};
   __u32 * ingress_allowed = bpf_map_lookup_elem(&network_policy_map, &key_ingress);
 
   if(ingress_allowed != 0 && *ingress_allowed == 0)
     return 0;
+
+  // If destination has not specified ingress or ingress is allowed
+  // Check if source has allowed engress
 
   struct key key_egress = {bpf_ntohl(saddr), 0};
   __u32 * egress_allowed = bpf_map_lookup_elem(&network_policy_map, &key_egress);
@@ -123,6 +130,8 @@ static __always_inline __u16 validate_source_and_destination_path(__u32 saddr, _
   if(egress_allowed != 0 && *egress_allowed == 0)
     return 0;
 
+  // If both source and destination has allowed egress and ingress, respectively or none entries were found
+  // for destination or source, allowed packet by default.
   return 1;
 }
 

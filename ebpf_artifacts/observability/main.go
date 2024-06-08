@@ -26,7 +26,6 @@ func main() {
 	})
 
 	var podMap = IPMap{m: make(map[uint32]string)}
-	// var interfaceList = IfList{list: []string{}}
 
 	var podController, serviceController = WatchPodAndService(clientset, &podMap)
 	stop := make(chan struct{})

@@ -41,6 +41,8 @@ type ServiceEventHandlerFuncs struct {
 	DeleteHandler func(uint32, []uint16)
 }
 
+// Initializes a golang Kubernetes client, similar to kubectl
+// When deployed inside a cluster, this configuration automatically initializes
 func InitializeK8sClient() *kubernetes.Clientset {
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -65,6 +67,7 @@ func InitializeK8sClient() *kubernetes.Clientset {
 	return clientset
 }
 
+// Continously watches for changes in the Kubernetes cluster related to services, endpoint resources
 func WatchService(clientset *kubernetes.Clientset, namespace string, serviceMap *ServiceMap, handlers ServiceEventHandlerFuncs) (cache.Controller, cache.Controller) {
 	serviceWatchlist := cache.NewListWatchFromClient(clientset.CoreV1().RESTClient(), "services", namespace, fields.Everything())
 	endpointWatchlist := cache.NewListWatchFromClient(clientset.CoreV1().RESTClient(), "endpoints", namespace, fields.Everything())
@@ -202,6 +205,8 @@ func deleteServiceMapEntry(serviceMap *ServiceMap, entryKey string) {
 	delete(serviceMap.m, entryKey)
 	serviceMap.Unlock()
 }
+
+// Helper helper functions
 
 func FormatPorts(ports map[uint32]uint32) string {
 	formatString := ""

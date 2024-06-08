@@ -7,8 +7,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
@@ -40,6 +38,8 @@ type NetworkPolicyEventHandlerFuncs struct {
 	DeletePodHandler func(uint32, map[string]string)
 }
 
+// Initializes a golang Kubernetes client, similar to kubectl
+// When deployed inside a cluster, this configuration automatically initializes
 func InitializeK8sClient() *kubernetes.Clientset {
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -64,6 +64,7 @@ func InitializeK8sClient() *kubernetes.Clientset {
 	return clientset
 }
 
+// Continously watches for changes in the Kubernetes cluster related to services and pod resources
 func WatchPodAndService(clientset *kubernetes.Clientset, ipMap *IPMap) (cache.Controller, cache.Controller) {
 	podWatchList := cache.NewListWatchFromClient(clientset.CoreV1().RESTClient(), "pods", v1.NamespaceAll, fields.Everything())
 	serviceWatchList := cache.NewListWatchFromClient(clientset.CoreV1().RESTClient(), "services", v1.NamespaceAll, fields.Everything())
@@ -169,21 +170,6 @@ func FormatPorts(ports map[uint32]uint32) string {
 	return formatString
 }
 
-func IPStringToIntArray(ip string) [4]uint8 {
-	var array [4]uint8
-	bytes := strings.Split(ip, ".")
-
-	for i, byte_ := range bytes {
-		integerValue, err := strconv.Atoi(byte_)
-		if err != nil {
-			panic(err.Error())
-		}
-		array[i] = uint8(integerValue)
-	}
-
-	return array
-}
-
 func IPStringToInt(ip string) uint32 {
 	net := net.ParseIP(ip)
 	if net == nil {
@@ -191,14 +177,4 @@ func IPStringToInt(ip string) uint32 {
 	}
 	net = net.To4()
 	return uint32(binary.BigEndian.Uint32(net))
-}
-
-func IPIntToString(sourceAddress uint32) string {
-	var bytes = make([]uint8, 4)
-	bytes[0] = uint8(sourceAddress & 0xFF)
-	bytes[1] = uint8(sourceAddress>>8) & 0xFF
-	bytes[2] = uint8(sourceAddress>>16) & 0xFF
-	bytes[3] = uint8(sourceAddress>>24) & 0xFF
-
-	return fmt.Sprintf("%d.%d.%d.%d", bytes[3], bytes[2], bytes[1], bytes[0])
 }

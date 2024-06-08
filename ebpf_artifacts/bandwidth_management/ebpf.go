@@ -107,8 +107,6 @@ func LoadObjects(opts *ebpf.CollectionOptions) *programObjects {
 
 	var ve *ebpf.VerifierError
 	if errors.As(err, &ve) {
-		// Using %+v will print the whole verifier error, not just the last
-		// few lines.
 		log.Fatalf("Verifier error loading eBPF objects: %+v\n", ve)
 	} else if err != nil {
 		log.Fatal("Loading eBPF objects:", err)
@@ -117,7 +115,9 @@ func LoadObjects(opts *ebpf.CollectionOptions) *programObjects {
 	return &objs
 }
 
-func getEthernetInterfaces() ([]net.Interface, error) {
+// Fetches all relevant network interfaces
+// Can specify which network interfaces to fetch using the INTERFACE_SUBSTRING environment variable.
+func getNetworkInterfaces() ([]net.Interface, error) {
 	interfaceList, err := net.Interfaces()
 	resultingList := make([]net.Interface, 0, 1)
 
@@ -150,6 +150,8 @@ func getEthernetInterfaces() ([]net.Interface, error) {
 	}
 }
 
+// Adds a qdics to a network interface
+// Uses the clsact type
 func addQDisc(iface net.Interface) (*netlink.GenericQdisc, error) {
 	qdisc := &netlink.GenericQdisc{
 		QdiscAttrs: netlink.QdiscAttrs{
@@ -167,18 +169,21 @@ func deleteQDisc(qdisc *netlink.GenericQdisc) error {
 	return netlink.QdiscDel(qdisc)
 }
 
+// Adds a bpf filter containing the eBPF program to a network interface
+// Direct action set to true, as recommneded by https://qmonnet.github.io/whirl-offload/2020/04/11/tc-bpf-direct-action/
 func attachTCProgram(iface net.Interface, program ebpf.Program, attr netlink.FilterAttrs) error {
 
 	return netlink.FilterAdd(&netlink.BpfFilter{
 		FilterAttrs:  attr,
 		Fd:           program.FD(),
 		Name:         "rate_limiter",
-		DirectAction: true, // https://qmonnet.github.io/whirl-offload/2020/04/11/tc-bpf-direct-action/
+		DirectAction: true,
 	})
 }
 
+// Attaches the eBPF program to the Traffic Control hook on the network interfaces specified by INTERFACE_SUBSTRING
 func attachProgramToInterfaces(program *ebpf.Program, parent uint32) []*netlink.GenericQdisc {
-	ifaces, err := getEthernetInterfaces()
+	ifaces, err := getNetworkInterfaces()
 	qdiscs := []*netlink.GenericQdisc{}
 
 	if err != nil {
@@ -196,7 +201,7 @@ func attachProgramToInterfaces(program *ebpf.Program, parent uint32) []*netlink.
 		if err != nil {
 			log.Printf("Failed to list filters: %v", err)
 		}
-
+		// Checks that the eBPF program does not already exists on the hook
 		var pass = false
 		for _, filter := range filters {
 			if bpfFilter, ok := filter.(*netlink.BpfFilter); ok {
@@ -244,9 +249,11 @@ func attachProgramToInterfaces(program *ebpf.Program, parent uint32) []*netlink.
 	return qdiscs
 }
 
+// Continously checks for new network interfaces, and attaches the eBPF program to them
 func attachProgramToInterfacesLoop(program *ebpf.Program, parent uint32) {
 	qdiscs := attachProgramToInterfaces(program, parent)
 
+	// Removes the qdisc from the network interface when the application is stopped
 	for _, qdisc := range qdiscs {
 		defer deleteQDisc(qdisc)
 	}

@@ -1,0 +1,22 @@
+\begin{table}
+\centering
+\resizebox{\columnwidth}{!}{\begin{tabular}{|l|l|l|l|l|l|l|}
+\hline
+ & Mean (ms) & Median (ms) & Min (ms) & p30 (ms) & p90 (ms) & Max (ms) \\
+\hline
+linkerd & \large{1.4436} & \large{1.257} & \large{0.249} & \large{0.738} & \large{2.7096} & \large{4.239} \\
+\hline
+istio & \large{1.0373} & \large{0.894} & \large{0.271} & \large{0.556} & \large{1.841} & \large{6.208} \\
+\hline
+without & \large{1.1406} & \large{0.716} & \large{0.167} & \large{0.391} & \large{2.4351} & \large{6.295} \\
+\hline
+istio-ambient & \large{1.6308} & \large{1.557} & \large{0.374} & \large{1.1856} & \large{2.591} & \large{4.143} \\
+\hline
+istio-merbridge & \large{1.3861} & \large{1.194} & \large{0.252} & \large{0.6094} & \large{2.4932} & \large{16.838} \\
+\hline
+cilium & \large{1.4305} & \large{1.251} & \large{0.141} & \large{0.4524} & \large{2.945} & \large{7.055} \\
+\hline
+ebpf & \large{0.9263} & \large{0.571} & \large{0.146} & \large{0.333} & \large{1.7646} & \large{6.89} \\
+\hline
+\end{tabular}}
+\end{table}

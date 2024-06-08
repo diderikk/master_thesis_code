@@ -41,6 +41,8 @@ type NetworkPolicyEventHandlerFuncs struct {
 	DeletePodHandler func(uint32, map[string]string)
 }
 
+// Initializes a golang Kubernetes client, similar to kubectl
+// When deployed inside a cluster, this configuration automatically initializes
 func InitializeK8sClient() *kubernetes.Clientset {
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -65,8 +67,10 @@ func InitializeK8sClient() *kubernetes.Clientset {
 	return clientset
 }
 
+// Continously watches for changes in the Kubernetes cluster related to pods, services, namespaces or network policies
 func WatchNetworkPolicy(clientset *kubernetes.Clientset, namespace string, networkPolicyMap *NetworkPolicyMap, podMap *PodMap, namespaceMap *NamespaceMap,
 	handlers NetworkPolicyEventHandlerFuncs) (cache.Controller, cache.Controller, cache.Controller, cache.Controller) {
+	// First fetches all namespaces inside the cluster
 	namespaces, err := clientset.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		panic(err)
@@ -76,11 +80,13 @@ func WatchNetworkPolicy(clientset *kubernetes.Clientset, namespace string, netwo
 		}
 	}
 
+	// All pods, services and namespaces are fetched, but only the network policies from a single namespace is fetched.
 	podWatchList := cache.NewListWatchFromClient(clientset.CoreV1().RESTClient(), "pods", v1.NamespaceAll, fields.Everything())
 	serviceWatchList := cache.NewListWatchFromClient(clientset.CoreV1().RESTClient(), "services", v1.NamespaceAll, fields.Everything())
 	networkPolicyList := cache.NewListWatchFromClient(clientset.NetworkingV1().RESTClient(), "networkpolicies", namespace, fields.Everything())
 	namespaceWatchList := cache.NewListWatchFromClient(clientset.CoreV1().RESTClient(), "namespaces", v1.NamespaceAll, fields.Everything())
 
+	// Connects handler functions to the different events that occur related to the resources.
 	_, networkPolicyController := cache.NewInformer(networkPolicyList, &netv1.NetworkPolicy{}, 0*time.Second, cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			networkPolicy := obj.(*netv1.NetworkPolicy)
@@ -204,6 +210,9 @@ func WatchNetworkPolicy(clientset *kubernetes.Clientset, namespace string, netwo
 	return networkPolicyController, podController, serviceController, namespaceController
 }
 
+// The following six functions are used to update maps that store the Kubernetes resources in memory
+// Some also modify or extract data from the resource, in order to not use unecessary amount of memory.
+
 func updateNetworkPolicyMap(networkPolicyMap *NetworkPolicyMap, networkPolicy *netv1.NetworkPolicy) NetworkPolicy {
 	np := convertV1NetworkPolicyToLocalNetworkPolicyStruct(*networkPolicy)
 	// fmt.Printf("Network Policy map updated %s\n", networkPolicy.Name)
@@ -307,6 +316,7 @@ func deleteNamespaceMapEntry(namespaceMap *NamespaceMap, namespace *v1.Namespace
 	return nil
 }
 
+// Converts a Kubernetes Network Policy resource to a structure that is stored in memory
 func convertV1NetworkPolicyToLocalNetworkPolicyStruct(networkPolicy netv1.NetworkPolicy) NetworkPolicy {
 	policyTypes := make([]string, len(networkPolicy.Spec.PolicyTypes))
 	for index, pt := range networkPolicy.Spec.PolicyTypes {
@@ -321,6 +331,7 @@ func convertV1NetworkPolicyToLocalNetworkPolicyStruct(networkPolicy netv1.Networ
 	}
 }
 
+// Checks if item exists inside an array/list
 func isInSlice[T any](slice []T, target T) bool {
 	for _, item := range slice {
 		if reflect.DeepEqual(item, target) {

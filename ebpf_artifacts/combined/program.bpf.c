@@ -20,7 +20,7 @@
 
 char __license[] SEC("license") = "Dual MIT/GPL";
 
-// Ring Buffer event. I.E., the information that is read by the userspace program.
+// Load balancing and observability
 struct event
 {
   unsigned char saddr[4];
@@ -28,10 +28,9 @@ struct event
   // Original destinatin address
   unsigned char odaddr[4];
 };
-
-// Force emitting struct event into the ELF.
 const struct event *unused __attribute__((unused));
 
+// Bandwidth management
 struct event_rate
 {
   unsigned char saddr[4];
@@ -40,26 +39,27 @@ struct event_rate
 };
 const struct event_rate *unused_rate __attribute__((unused));
 
+// Network policy
 struct event_np
 {
   unsigned char saddr[4];
   unsigned char daddr[4];
 };
-
-// Force emitting struct event into the ELF.
 const struct event *unused_np __attribute__((unused));
 
-
+// Load balancing 
 struct endpoints_meta {
   __u16 endpoints_amount;
 };
 
+// Load balancing 
 struct endpoint
 {
   __u32 ip;
   __u16 port;
 };
 
+// Load balancing 
 struct flow_endpoint
 {
   __u32 ip;
@@ -67,13 +67,14 @@ struct flow_endpoint
   __u8 is_destination;
 };
 
-// Padding different between go application in userspace 0x00 (userspace) -> 0xff (eBPF)
+// Load balancing
 struct key
 {
   __u32 ip;
   __u32 port;
 };
 
+// Load balancing and observability
 struct flow_key
 {
   __u32 saddr;
@@ -82,23 +83,20 @@ struct flow_key
   __u32 dport;
 };
 
+// Bandwidth management and network policy
 struct ipv4_key {
   __u32 saddr;
   __u32 daddr;
 };
 
-/*
-  Ring Buffer. In eBPF maps are used to communicate with other processes (both other eBPF programs and userspace programs)
-  Events submitted to a Ring Buffer map, can be read by other processes by listening to the "map" or in reality the
-  file descriptor
-*/
+// ALL
 struct
 {
   __uint(type, BPF_MAP_TYPE_RINGBUF);
   __uint(max_entries, 64 * 4096);
 } event_buff SEC(".maps");
 
-// Port Map. Key: Index 0-1024, Value: Port struct (port and target port).
+// Load balancing
 struct endpoints_array
 {
   __uint(type, BPF_MAP_TYPE_ARRAY);
@@ -107,6 +105,7 @@ struct endpoints_array
   __uint(max_entries, ENDPOINT_MAX);
 } endpoints SEC(".maps");
 
+// Load balancing
 struct {
   __uint(type, BPF_MAP_TYPE_LRU_HASH);
   __type(key, struct key);
@@ -115,7 +114,7 @@ struct {
   __uint(max_entries, SERVICE_MAX);
 } service_ref_meta_map SEC(".maps");
 
-// Port Map. Key: Destionation IP address and port, Value: An BPF array containing all endpoints for a referenced service resource.
+// Load balancing
 struct
 {
   __uint(type, BPF_MAP_TYPE_HASH_OF_MAPS);
@@ -126,7 +125,7 @@ struct
 } service_refs_map SEC(".maps");
 
 
-// Reason for not requiring to delete entries after they are over -> might cause inconsistencies
+// Load balancing
 struct {
   __uint(type, BPF_MAP_TYPE_LRU_HASH);
   __type(key, struct flow_key);
@@ -135,6 +134,7 @@ struct {
   __uint(max_entries, 2*FLOW_MAX);
 } flow_map SEC(".maps");
 
+// Bandwidth management
 struct
 {
     __uint(type, BPF_MAP_TYPE_LRU_HASH);
@@ -143,6 +143,7 @@ struct
     __uint(max_entries, 1024);
 } pkt_count SEC(".maps");
 
+// Network Policy
 struct {
   __uint(type, BPF_MAP_TYPE_LRU_HASH);
   __type(key, struct key);
@@ -151,6 +152,7 @@ struct {
   __uint(max_entries, POD_MAX_AMOUNT);
 } network_policy_map SEC(".maps");
 
+// Observability
 struct {
   __uint(type, BPF_MAP_TYPE_LRU_HASH);
   __type(key, struct flow_key);
@@ -172,7 +174,7 @@ static __always_inline void initialize_notify_event_np(struct iphdr *iph, struct
 static __always_inline __u32 *increment_count(struct iphdr *iph, __u16 sport, __u16 dport);
 static __always_inline void initialize_notify_event_ob(struct iphdr *iph, struct event *notify_event);
 
-
+// Load balancing
 SEC("tc")
 int reverse_load_balance(struct __sk_buff *skb){
   void *data_end = (void *)(long)skb->data_end;
@@ -322,6 +324,7 @@ int combined(struct __sk_buff *skb)
       return TC_ACT_OK;
 
     struct endpoint endpoint = {r_ep->ip, r_ep->port};
+    // NB! DID NOT WORK ON WHEN PODS ARE ON DIFFERENT NODES
     // swap_destination(skb, &old_iph, iph, tcph, udph, &endpoint);
 
     // // Copies the packet to same interface (ingress) -> This is only used for debugging/explanation
@@ -337,6 +340,7 @@ int combined(struct __sk_buff *skb)
     if(ep != 0){
       store_flows(iph, sport, dport, ep);
       struct iphdr old_iph = *iph;
+      // NB! DID NOT WORK ON WHEN PODS ARE ON DIFFERENT NODES
       // swap_destination(skb, &old_iph, iph, tcph, udph, ep);
 
       // Reload the iphdr struct after updating the destination IP address and checksum
@@ -362,7 +366,7 @@ int combined(struct __sk_buff *skb)
   return TC_ACT_OK;
 }
 
-
+// Load balancing
 static __always_inline void select_service_endpoint(struct key *key, struct endpoint ** ep)
 {
   if(key != 0){
@@ -386,12 +390,14 @@ static __always_inline void select_service_endpoint(struct key *key, struct endp
   }
 }
 
+// Load balancing
 static __always_inline void search_flows(struct iphdr *iph, __u16 sport, __u16 dport, struct flow_endpoint ** ep){
   struct flow_key rkey = {bpf_ntohl(iph->saddr), bpf_ntohs(sport), bpf_ntohl(iph->daddr), bpf_ntohs(dport)};
 
   *ep = bpf_map_lookup_elem(&flow_map, &rkey);
 }
 
+// Load balancing
 static __always_inline long store_flows(struct iphdr *iph, __u16 sport, __u16 dport, struct endpoint * ep){
   struct flow_key rkey1 = {bpf_ntohl(iph->saddr), bpf_ntohs(sport), bpf_ntohl(iph->daddr), bpf_ntohs(dport)};
   struct flow_endpoint rep1 = {ep->ip, ep->port, 1};
@@ -405,6 +411,7 @@ static __always_inline long store_flows(struct iphdr *iph, __u16 sport, __u16 dp
   return bpf_map_update_elem(&flow_map, &rkey2, &rep2, BPF_NOEXIST);
 }
 
+// Load balancing
 static __always_inline long long swap_destination(struct __sk_buff *skb, struct iphdr *old_iph, struct iphdr *iph, struct tcphdr *tcph, struct udphdr *udph, struct endpoint * ep){
   // Swap L4 destination
   if(tcph != 0){
@@ -450,6 +457,7 @@ static __always_inline long long swap_destination(struct __sk_buff *skb, struct 
   return -1;
 }
 
+// Load balancing
 static __always_inline long long swap_source(struct __sk_buff *skb, struct iphdr *old_iph, struct iphdr *iph, struct tcphdr *tcph, struct udphdr *udph, struct flow_endpoint * ep){
   // Swap L4 destination
   if(tcph != 0){
@@ -494,6 +502,7 @@ static __always_inline long long swap_source(struct __sk_buff *skb, struct iphdr
   return -1;
 }
 
+// Bandwidth management
 static __always_inline __u64 *get_and_increment_flow_count(struct iphdr *iph) {
   // Combines the source IP address with the destination IP address, and uses it to lookup the counter
   struct ipv4_key key = {iph->saddr, iph->daddr};
@@ -513,8 +522,8 @@ static __always_inline __u64 *get_and_increment_flow_count(struct iphdr *iph) {
 	return count;
 }
 
+// Network policy
 static __always_inline __u16 validate_source_and_destination_path(__u32 saddr, __u32 daddr){
-  // bpf_printk("Searching for policy. Saddr: %d, Daddr: %d", bpf_ntohl(saddr), bpf_ntohl(daddr));
   struct key key = {bpf_ntohl(saddr), bpf_ntohl(daddr)};
   __u32 * path_allowed = bpf_map_lookup_elem(&network_policy_map, &key);
 
@@ -541,6 +550,7 @@ static __always_inline __u16 validate_source_and_destination_path(__u32 saddr, _
   return 1;
 }
 
+// Observability
 static __always_inline __u32 *increment_count(struct iphdr *iph, __u16 sport, __u16 dport){
   struct flow_key key = {iph->saddr, sport, iph->daddr, dport};
 
@@ -557,6 +567,7 @@ static __always_inline __u32 *increment_count(struct iphdr *iph, __u16 sport, __
   return count;
 }
 
+// Load balacing
 static __always_inline void initialize_notify_event(struct iphdr *iph, struct event *notify_event, struct endpoint *endpoint){
   // Initialize the source address
 	notify_event->saddr[0] = (unsigned char)(iph->saddr & 0xFF);
@@ -580,7 +591,8 @@ static __always_inline void initialize_notify_event(struct iphdr *iph, struct ev
   }
 }
 
-  static __always_inline void initialize_notify_event_rate(struct iphdr *iph, __u64 count, struct event_rate *notify_event){
+// Bandwidth management
+static __always_inline void initialize_notify_event_rate(struct iphdr *iph, __u64 count, struct event_rate *notify_event){
   // Initialize the destination address
   notify_event->daddr[0] = (unsigned char)(iph->daddr & 0xFF);
 	notify_event->daddr[1] = (unsigned char)(iph->daddr>>8) & 0xFF;
@@ -596,6 +608,7 @@ static __always_inline void initialize_notify_event(struct iphdr *iph, struct ev
   notify_event->count = count;
 }
 
+// Network policy
 static __always_inline void initialize_notify_event_np(struct iphdr *iph, struct event_np *notify_event){
   // Initialize the destination address
   notify_event->daddr[0] = (unsigned char)(iph->daddr & 0xFF);
@@ -610,6 +623,7 @@ static __always_inline void initialize_notify_event_np(struct iphdr *iph, struct
 	notify_event->saddr[3] = (unsigned char)(iph->saddr>>24) & 0xFF;
 }
 
+// Observability
 static __always_inline void initialize_notify_event_ob(struct iphdr *iph, struct event *notify_event){
   // Initialize the destination address
   notify_event->daddr[0] = (unsigned char)(iph->daddr & 0xFF);

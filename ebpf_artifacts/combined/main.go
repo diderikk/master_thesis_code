@@ -74,8 +74,9 @@ func main() {
 	if envNamespace := os.Getenv("WATCH_NAMESPACE"); envNamespace != "" {
 		namespace = envNamespace
 	}
-
+	// Network policy
 	var networkPolicyController, podController, serviceControllerNp, namespaceController = WatchNetworkPolicy(clientset, "default", &networkPolicyMap, &podMap, &namespaceMap, serviceEventHandlerNp)
+	// Load balacing
 	var serviceController, endpointsController = WatchService(clientset, namespace, &services, serviceEventHandlerLb)
 
 	stop := make(chan struct{})
@@ -91,6 +92,7 @@ func main() {
 	attachEbpf(ebpfObjects)
 }
 
+// See bandwidth_management
 func asyncResetCounter[T programIpv4Key](programMap ebpf.Map) {
 	log.Println("Resetting begun...")
 
