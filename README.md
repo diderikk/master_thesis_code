@@ -4,6 +4,7 @@ Made by: [Diderik Kramer](https://github.com/diderikk)
 
 ## Project structure
 * **ebpf_artifact**: Consists of four Golang modules implementing four eBPF programs that each mimic a service mesh characteristic. The eBPF programs have only been compiled and deployed using kernel version `Linux 6.5.0-35-generic x86_64`.
+* **http_server_impl**: Consist of the HTTP server implementation using Phoenix/Elixir.
 * **performance_tests**: Consists of all the scripts used to perform the performance tests and the plots representing the metrics extracted during the tests.
 
 ## Test environment
