@@ -1,0 +1,24 @@
+\begin{table}
+\centering
+\resizebox{\columnwidth}{!}{\begin{tabular}{|l|l|l|l|l|l|l|l|l|}
+\hline
+ & Memory Mean & Memory p70 & Memory p90 & Memory Max & CPU Mean & CPU p70 & CPU p90 & CPU Max \\
+\hline
+Total linkerd & \large{6618.2907} & \large{6933.8359} & \large{7346.5156} & \large{7449.8047} & \large{1190.5538} & \large{1502.2} & \large{1581.0} & \large{2361} \\
+\hline
+Total istio & \large{6729.2523} & \large{7004.7086} & \large{7420.8883} & \large{7512.7656} & \large{1326.4923} & \large{1698.8} & \large{1777.0} & \large{2313} \\
+\hline
+Total without & \large{5937.9654} & \large{6363.8227} & \large{6767.7762} & \large{6898.957} & \large{857.3429} & \large{1113.6} & \large{1155.1} & \large{1449} \\
+\hline
+Total traefik-mesh & \large{5982.8487} & \large{6320.8637} & \large{6722.0641} & \large{6767.6172} & \large{1130.7794} & \large{1503.9} & \large{1555.0} & \large{1953} \\
+\hline
+Total istio-ambient & \large{6557.0384} & \large{6867.5215} & \large{7259.8223} & \large{7340.6875} & \large{1100.2121} & \large{1376.5} & \large{1422.0} & \large{1826} \\
+\hline
+Total istio-merbridge & \large{7498.9073} & \large{7791.7285} & \large{8176.2207} & \large{8243.3477} & \large{1327.6818} & \large{1727.0} & \large{1762.0} & \large{2324} \\
+\hline
+Total cilium & \large{6549.6111} & \large{6891.0176} & \large{7282.5176} & \large{7385.0625} & \large{888.2424} & \large{1066.0} & \large{1180.5} & \large{1552} \\
+\hline
+Total ebpf & \large{5543.3287} & \large{5860.2344} & \large{6250.0762} & \large{6495.5195} & \large{1122.3333} & \large{1398.5} & \large{1442.0} & \large{1915} \\
+\hline
+\end{tabular}}
+\end{table}
